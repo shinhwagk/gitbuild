@@ -7,12 +7,10 @@ on:
 jobs:
   job1:
     runs-on: ubuntu-latest
-    outputs:
-      output1: ${{ steps.step1.outputs.test }}
     steps:
       - id: step1
         run: echo "::set-output name=test::hello"
-      - run: echo -ne ${{steps.step1.outputs.output1}}
+      - run: echo  ${{steps.step1.outputs}}
       # - name: Checkout
       #   uses: actions/checkout@v2
       # - name: Set up QEMU
