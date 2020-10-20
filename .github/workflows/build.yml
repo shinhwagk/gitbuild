@@ -15,9 +15,9 @@ jobs:
       - run: echo  ${{join(steps.step1.outputs.*, '\n')}}
       - id: step2
         run: echo "::set-output name=test::hello\nabc"
-      - run: echo  ${{steps.step2.outputs}}
-      - run: echo  ${{steps.step2.outputs.test}}
-      - run: echo  ${{join(steps.step2.outputs.*, '\n')}}
+      - run: echo -e ${{steps.step2.outputs}}
+      - run: echo -e ${{steps.step2.outputs.test}}
+      - run: echo -e ${{join(steps.step2.outputs.*, '\n')}}
       # - name: Checkout
       #   uses: actions/checkout@v2
       # - name: Set up QEMU
