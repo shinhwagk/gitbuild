@@ -11,8 +11,8 @@ jobs:
       output1: ${{ steps.step1.outputs.test }}
     steps:
       - id: step1
-        run: echo "::set-output name=test::hello\nworlsz"
-      - run: echo -ne ${{needs.job1.outputs.output1}}
+        run: echo "::set-output name=test::hello"
+      - run: echo -ne ${{steps.step1.outputs.output1}}
       # - name: Checkout
       #   uses: actions/checkout@v2
       # - name: Set up QEMU
