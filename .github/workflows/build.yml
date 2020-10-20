@@ -24,8 +24,8 @@ jobs:
         val: ${{fromJson(needs.job1.outputs.output2)}}
     steps:
     - run: |
-        echo -ne ${{matrix.key}}
-        echo -ne ${{matrix.val}}`
+        echo ${{matrix.key}}
+        echo ${{matrix.val}}
       # - name: Checkout
       #   uses: actions/checkout@v2
       # - name: Set up QEMU
