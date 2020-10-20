@@ -9,18 +9,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       output1: ${{ steps.step1.outputs.test }}
+      output2: ${{ steps.step2.outputs.test }}
     steps:
       - id: step1
         run: echo "::set-output name=test::[\"a\",\"b\"]"
-      - run: echo  ${{steps.step1.outputs.test}}
+      - id: step2
+        run: echo "::set-output name=test::[\"a1\",\"b1\"]"
   job2:
     needs: job1
     runs-on: ubuntu-latest
     strategy:
       matrix:
         key: ${{fromJson(needs.job1.outputs.output1)}}
+        val: ${{fromJson(needs.job1.outputs.output2)}}
     steps:
-    - run: echo -ne ${{matrix.key}}
+    - run: |
+        echo -ne ${{matrix.key}}
+        echo -ne ${{matrix.val}}`
       # - name: Checkout
       #   uses: actions/checkout@v2
       # - name: Set up QEMU
