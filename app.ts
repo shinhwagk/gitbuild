@@ -2,6 +2,10 @@ import * as path from "https://deno.land/std@0.74.0/path/mod.ts";
 import { readLines } from "https://deno.land/std@0.74.0/io/bufio.ts";
 import { existsSync } from "https://deno.land/std@0.74.0/fs/exists.ts";
 
+type GitFileContentStatus = "+" | "-";
+
+const diffHeaderRe = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+
 function execCommand(cmd: string[], cwd?: string) {
   return Deno.run({
     cmd,
@@ -33,20 +37,6 @@ async function procConsole(
   (await procOutputLines(proc)).forEach(console.log);
 }
 
-type GitFileContentStatus = "+" | "-";
-
-const diffHeaderRe = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
-// class ShellCommand {
-//   execCommand(cmd: string[], cwd?: string) {
-//     Deno.run({
-//       cmd,
-//       stdout: "piped",
-//       stderr: "piped",
-//       cwd,
-//     });
-//     return this;
-//   }
-// }
 interface IRegistry {
   login(): void;
   delete(org: string, name: string, tag: string): void;
@@ -101,7 +91,9 @@ async function GitDiffFilesByPath(
   const cmd = `git log --pretty= -1 -p --name-only ${c.sha} -- ${c.path}`
     .split(" ");
   const proc = execCommand(cmd, c.root);
-  return (await procOutputLines(proc)).filter((l) => l.length >= 1);
+  const files = (await procOutputLines(proc)).filter((l) => l.length >= 1);
+  console.log("GitDiffFilesByPath", files);
+  return files;
 }
 
 async function GitDiffContentByFile(
@@ -138,7 +130,9 @@ async function readTagAliasesIfExist(
   if (existsSync(AliasesTagFile(tag))) {
     const f = Deno.openSync(AliasesTagFile(tag));
     for await (const alias of readLines(f)) {
-      aliases.push(alias.trim());
+      if (alias.length >= 1) {
+        aliases.push(alias.trim());
+      }
     }
     f.close();
   }
@@ -158,51 +152,60 @@ async function analyseChangeFiles(
   const deleteTags = new Set<string>();
   const aliasesTags: Map<string, Set<string>> = new Map();
 
-  const latestTag = Deno.readTextFileSync(LatestTagFile)
-    .trim();
-  for (
-    const gitFile of changeFiles
-  ) {
-    const [name, tag] = gitFile.split("/");
-    if (buildTags.has(tag) || deleteTags.has(tag)) {
-      continue;
-    }
-    if (
-      checkTagDirExist(name, tag)
-    ) {
-      if (
-        gitFile !== AliasesTagFile(tag)
-      ) {
-        buildTags.add(tag);
-      }
-      const appendLatestTag = (latestTag === tag) ? ["latest"] : [];
+  const latestTag = existsSync(LatestTagFile)
+    ? Deno.readTextFileSync(LatestTagFile)
+      .trim()
+    : "";
+
+  console.log(changeFiles);
+  const tagsChange = new Set(
+    changeFiles.map((f) => f.split("/"))
+      .filter((sf) => sf.length >= 3)
+      .filter((sf) => sf[2] !== "tags")
+      .map((sf) => sf[1]),
+  );
+  const aliasesChange = new Set(
+    changeFiles
+      .map((f) => f.split("/"))
+      .filter((sf) => sf.length >= 3)
+      .filter((sf) => sf[2] === "tags")
+      .map((sf) => sf[1]),
+  );
+  for (const tag of tagsChange) {
+    if (checkTagDirExist(ImageName, tag)) {
+      buildTags.add(tag);
+      const appendLatestTag = latestTag === tag ? ["latest"] : [];
       for (
         const alias of (await readTagAliasesIfExist(tag)).concat(
           appendLatestTag,
         )
       ) {
-        if (aliasesTags.has(tag)) {
-          aliasesTags.get(tag)?.add(alias);
-        } else {
+        if (!aliasesTags.has(tag)) {
           aliasesTags.set(tag, new Set());
         }
+        aliasesTags.get(tag)?.add(alias);
       }
     } else {
-      // delete tag with that aliases and latest
       deleteTags.add(tag);
-      if (latestTag === tag) {
-        deleteTags.add("latest");
-      }
-      for (
-        const alias of (await GitDiffContentByFile(
-          {
-            root: GitRoot,
-            sha: GitSha,
-            path: AliasesTagFile(tag),
-          },
-        )).filter((d) => d.status === "-").map((d) => d.content)
-      ) {
+    }
+  }
+  for (const tag of aliasesChange) {
+    for (
+      const { status, content: alias } of (await GitDiffContentByFile(
+        {
+          root: GitRoot,
+          sha: GitSha,
+          path: path.join(ImageName, tag, "tags"),
+        },
+      ))
+    ) {
+      if (status === "-") {
         deleteTags.add(alias);
+      } else {
+        if (!aliasesTags.has(tag)) {
+          aliasesTags.set(tag, new Set());
+        }
+        aliasesTags.get(tag)?.add(alias);
       }
     }
   }
@@ -275,15 +278,17 @@ async function ImageCliTag(tag: string, alias: string) {
 }
 
 const GitRoot = Deno.args[0];
+const GitSha = Deno.args[2] || "HEAD";
 const ImageName = Deno.args[1];
-const GitSha = Deno.args[2];
 const Registry: "docker.io" | "quay.io" = Deno.env.get("Registry") as
   | "docker.io"
   | "quay.io"; // docker.io or quay.io
 const RegUser = Deno.env.get("RegistryUsername") || "";
 const RegPass = Deno.env.get("RegistryPasswrod") || "";
-const ImageBuildTool = "docker";
+const ImageBuildTool: "docker" | "podman" = "docker";
+
 const LatestTagFile = path.join(GitRoot, ImageName, "latest");
+
 const AliasesTagFile = (tag: string) =>
   path.join(GitRoot, ImageName, tag, "tags");
 
@@ -292,23 +297,26 @@ async function main() {
     { root: GitRoot, sha: GitSha, path: ImageName },
   );
   const { builds, aliases, deletes } = await analyseChangeFiles(files);
+  console.log("delete", deletes);
+  console.log("build", builds);
+  console.log("aliaes", aliases);
 
-  for (const tag of deletes) {
-    deleteImage(Registry, RegUser!, ImageName, tag);
-  }
-  ImageCliLogin(Registry, RegUser!, RegPass!);
+  // for (const tag of deletes) {
+  //   deleteImage(Registry, RegUser!, ImageName, tag);
+  // }
+  // ImageCliLogin(Registry, RegUser!, RegPass!);
   for (const tag of builds) {
     await ImageCliBuild(tag);
-    await ImageCliPush(tag);
+    // await ImageCliPush(tag);
   }
-  for (const [tag, alias] of aliases.entries()) {
-    for (const a of alias) {
-      await ImageCliTag(tag, a);
-      await ImageCliPush(a);
-    }
-  }
+  // for (const [tag, alias] of aliases.entries()) {
+  //   for (const a of alias) {
+  //     await ImageCliTag(tag, a);
+  //     await ImageCliPush(a);
+  //   }
+  // }
 }
 
 console.log(Deno.cwd());
 // run
-// await main();
+await main();
