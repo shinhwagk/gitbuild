@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        key: ${{fromJson(needs.job1.outputs.output1)}}
+        key: ${{fromJson(['a'])}}
     steps:
     - run: echo -ne ${{matrix.key}}
       # - name: Checkout
