@@ -15,7 +15,7 @@ jobs:
     steps:
       - id: step1
         run: |
-          if [ ${{matrix.key}} == "c" ];then
+          if [ ${{matrix.key}} == "d" ];then
             echo "::set-output name=test::[\"a\",\"b\"]"
           else
             echo "::set-output name=test::[\"c\",\"x\",\"y\"]"
