@@ -7,17 +7,19 @@ on:
 jobs:
   job1:
     runs-on: ubuntu-latest
+    outputs:
+      output1: ${{ steps.step1.outputs.test }}
     steps:
       - id: step1
-        run: echo "::set-output name=test::hello"
-      - run: echo  ${{steps.step1.outputs}}
+        run: echo "::set-output name=test::[\"a\",\"b\"]"
       - run: echo  ${{steps.step1.outputs.test}}
-      - run: echo  ${{join(steps.step1.outputs.*, '\n')}}
-      - id: step2
-        run: echo "::set-output name=test::`echo -e 'abc\ncccc'`"
-      - run: echo -e ${{steps.step2.outputs}}
-      - run: echo -e ${{steps.step2.outputs.test}}
-      - run: echo -e ${{join(steps.step2.outputs.*, '\n')}}
+  job2:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        key: ${{fromJson(needs.job1.outputs.matrix)}}
+    steps:
+    - run: echo -ne ${{matrix.key}}
       # - name: Checkout
       #   uses: actions/checkout@v2
       # - name: Set up QEMU
