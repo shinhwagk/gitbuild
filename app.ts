@@ -6,35 +6,58 @@ type GitFileContentStatus = "+" | "-";
 
 const diffHeaderRe = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
-function execCommand(cmd: string[], cwd?: string) {
-  return Deno.run({
+interface ExecResult {
+  success: boolean;
+  stdout: {
+    lines: string[];
+  };
+  stderr: {
+    lines: string[];
+  };
+}
+
+function readerToLines(r: Deno.Reader) {
+  const ls = [];
+  for await (const l of readLines(r)) {
+    ls.push(l);
+  }
+  return ls;
+}
+
+async function execCmd(cmd: string[], cwd?: string): Promise<ExecResult> {
+  const proc = Deno.run({
     cmd,
     stdout: "piped",
     stderr: "piped",
     cwd,
   });
+
+  return {
+    success: (await proc.status()).code === 0,
+    stdout: { lines: readerToLines(proc.stdout) },
+    stderr: { lines: readerToLines(proc.stderr) },
+  };
 }
 
-async function procOutput(
-  proc: Deno.Process<{ cmd: string[]; stdout: "piped"; stderr: "piped" }>,
-) {
-  const stdout = [];
-  const stderr = [];
-  for await (const l of readLines(proc.stdout as Deno.Reader)) {
-    stdout.push(l);
-  }
-  for await (const l of readLines(proc.stderr as Deno.Reader)) {
-    stderr.push(l);
-  }
-  return { code: (await proc.status()).code, stdout, stderr };
-}
+// async function procOutput(
+//   proc: Deno.Process<{ cmd: string[]; stdout: "piped"; stderr: "piped" }>,
+// ) {
+//   const stdout = [];
+//   const stderr = [];
+//   for await (const l of readLines(proc.stdout as Deno.Reader)) {
+//     stdout.push(l);
+//   }
+//   for await (const l of readLines(proc.stderr as Deno.Reader)) {
+//     stderr.push(l);
+//   }
+//   return { code: (await proc.status()).code, stdout, stderr };
+// }
 
-async function procConsole(
-  proc: Deno.Process<{ cmd: string[]; stdout: "piped"; stderr: "piped" }>,
+function procConsole(
+  er: ExecResult,
 ) {
-  const output = (await procOutput(proc));
-  output.stdout.forEach((s) => console.log("stdout: " + s));
-  output.stderr.forEach((s) => console.log("stderr: " + s));
+  er.stdout.lines.forEach((s) => console.log("stdout: " + s));
+  er.stderr.lines.forEach((s) => console.log("stderr: " + s));
 }
 
 interface IRegistry {
@@ -92,10 +115,12 @@ async function GitDiffFilesByPath(
 ): Promise<string[]> {
   const cmd = `git log --pretty= -1 -p --name-status ${c.sha} -- ${c.path}`
     .split(" ");
-  const proc = execCommand(cmd, c.root);
+  const proc = await execCmd(cmd, c.root);
   const files: string[] = [];
-  const fileStatus = ((await procOutput(proc)).stdout);
-  for (const line of fileStatus) {
+  if (!proc.success) {
+    return [];
+  }
+  for (const line of proc.stdout.lines) {
     if (line.length === 0) {
       continue;
     }
@@ -127,7 +152,11 @@ async function GitDiffContentByFile(
   const cmd = `git log --pretty= -1 -p ${c.sha} -- ${c.path}`.split(" ");
   const rs: { status: GitFileContentStatus; content: string }[] = [];
   let isChange = false;
-  for await (const line of readLines(execCommand(cmd, c.root).stdout)) {
+  const proc = await execCmd(cmd, c.root);
+  if (!proc.success) {
+    return [];
+  }
+  for (const line of proc.stdout.lines) {
     if (line.length === 0) {
       continue;
     }
@@ -245,10 +274,10 @@ async function deleteImage(
 ) {
   let api: IRegistry | undefined = undefined;
   if (Registry === "docker.io") {
-    api = new RegistryDockerIO(RegUser, RegPass);
+    api = new RegistryDockerIO(ImageOwner, RegPass);
   }
   await api?.login();
-  await api?.delete(RegUser!, name, tag);
+  await api?.delete(ImageOwner!, name, tag);
 }
 
 async function ImageCliLogin(
@@ -260,11 +289,11 @@ async function ImageCliLogin(
     `${ImageBuildTool} login ${registry} -u ${username} --password ${password}`
       .split(" ");
   console.log(cmd);
-  const p = await procOutput(execCommand(cmd));
-  if (p.code === 0) {
+  const p = await execCmd(cmd);
+  if (p.success) {
     console.log("login success.");
   } else {
-    p.stderr.forEach(console.log);
+    p.stderr.lines.forEach(console.log);
   }
 }
 
@@ -276,87 +305,62 @@ async function ImageCliRemoveImage(
   const cmd =
     `${ImageCliLogin} login ${registry} -u ${username} --password ${password}`
       .split(" ");
-  execCommand(cmd);
+  await execCmd(cmd);
+}
+
+async function ImageCli(args: string[]) {
+  const p = await execCmd([ImageBuildTool].concat(args));
+  if (p.success) {
+    console.log(args.join(" "));
+  } else {
+    p.stderr.lines.forEach(console.log);
+  }
 }
 
 async function ImageCliBuild(tag: string) {
   const cmd = [
-    ImageBuildTool,
+    "buildx",
     "build",
     "-t",
-    `${Registry}/${RegUser}/${ImageName}:${tag}`,
+    `${Registry}/${ImageOwner}/${ImageName}:${tag}`,
     ".",
   ];
-  console.log(cmd.join(" "), `${GitRoot}/${ImageName}/${tag}`);
-  const p = await procOutput(
-    execCommand(cmd, `${GitRoot}/${ImageName}/${tag}`),
-  );
-  // if (p.code === 0) {
-  //   console.log(
-  //     "build: ",
-  //     `${Registry}/${RegUser}/${ImageName}:${tag}`,
-  //     "success",
-  //   );
-  // } else {
-  //   p.stderr.forEach(console.log);
-  // }
+  await ImageCli(cmd);
 }
 
 async function ImageCliPush(tag: string) {
   const cmd = [
-    ImageBuildTool,
     "push",
-    `${Registry}/${RegUser}/${ImageName}:${tag}`,
+    `${Registry}/${ImageOwner}/${ImageName}:${tag}`,
   ];
-  const p = await procOutput(execCommand(cmd));
-  if (p.code === 0) {
-    console.log(
-      "push: ",
-      `${Registry}/${RegUser}/${ImageName}:${tag}`,
-      "success",
-    );
-  } else {
-    p.stderr.forEach(console.log);
-  }
+  await ImageCli(cmd);
 }
 
 async function ImageCliPull(tag: string) {
   const cmd = [
-    ImageBuildTool,
     "pull",
-    `${Registry}/${RegUser}/${ImageName}:${tag}`,
+    `${Registry}/${ImageOwner}/${ImageName}:${tag}`,
   ];
-  const p = await procOutput(execCommand(cmd));
-  if (p.code === 0) {
-    console.log(
-      "push: ",
-      `${Registry}/${RegUser}/${ImageName}:${tag}`,
-      "success",
-    );
-  } else {
-    p.stderr.forEach(console.log);
-  }
+  await ImageCli(cmd);
 }
 
 async function ImageCliTag(tag: string, alias: string) {
   const cmd = [
-    ImageBuildTool,
     "tag",
-    `${Registry}/${RegUser}/${ImageName}:${tag}`,
-    `${Registry}/${RegUser}/${ImageName}:${alias}`,
+    `${Registry}/${ImageOwner}/${ImageName}:${tag}`,
+    `${Registry}/${ImageOwner}/${ImageName}:${alias}`,
   ];
-  procConsole(execCommand(cmd));
+  await ImageCli(cmd);
 }
 
 const GitRoot = Deno.args[0];
-const GitSha = Deno.args[2] || "HEAD";
-const ImageName = Deno.args[1];
+const GitSha = Deno.args[1] || "HEAD";
+const ImageName = Deno.args[2];
 const Registry: "docker.io" | "quay.io" = Deno.env.get("Registry") as
   | "docker.io"
   | "quay.io"; // docker.io or quay.io
-const RegUser = Deno.env.get("RegistryUsername") || "";
-const RegPass = Deno.env.get("RegistryPasswrod") || "";
-const ImageBuildTool: "docker" | "podman" = "docker";
+const ImageOwner = Deno.env.get("image_owner") || "";
+const ImageBuildTool = "docker";
 
 const LatestTagFile = path.join(GitRoot, ImageName, "latest");
 
@@ -373,12 +377,12 @@ async function main() {
   console.log("aliaes", aliases);
 
   for (const tag of deletes) {
-    deleteImage(Registry, RegUser!, ImageName, tag);
+    deleteImage(Registry, ImageOwner!, ImageName, tag);
   }
   if (builds.size + aliases.size === 0) {
     return;
   }
-  await ImageCliLogin(Registry, RegUser!, RegPass!);
+  await ImageCliLogin(Registry, ImageOwner!, RegPass!);
   for (const tag of builds) {
     await ImageCliBuild(tag);
     await ImageCliPush(tag);

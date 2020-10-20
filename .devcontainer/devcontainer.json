@@ -5,7 +5,8 @@
 		"context": ".."
 	},
 	"extensions": [
-		"denoland.vscode-deno"
+		"denoland.vscode-deno",
+		"redhat.vscode-yaml"
 	],
 	"mounts": [
 		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
