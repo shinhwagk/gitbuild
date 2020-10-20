@@ -5,11 +5,14 @@ on:
     branches: master
 
 jobs:
-  login:
+  job1:
     runs-on: ubuntu-latest
+    outputs:
+      output1: ${{ steps.step1.outputs.test }}
     steps:
-      - run: echo a>aaaa
-      - run: cat aaaa
+      - id: step1
+        run: echo "::set-output name=test::hello\nworlsz"
+      - run: echo -ne ${{needs.job1.outputs.output1}}
       # - name: Checkout
       #   uses: actions/checkout@v2
       # - name: Set up QEMU
