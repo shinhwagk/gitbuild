@@ -11,6 +11,7 @@ jobs:
       - id: step1
         run: echo "::set-output name=test::hello"
       - run: echo  ${{steps.step1.outputs}}
+      - run: echo  ${{join(steps.step1.outputs.*, '\n')}}
       # - name: Checkout
       #   uses: actions/checkout@v2
       # - name: Set up QEMU
