@@ -25,6 +25,7 @@ jobs:
       - run: |
           echo ${{matrix.key}}
           echo ${{matrix.key.a}}
+          echo ${{toJson(matrix.key)}}
         # - name: Checkout
         #   uses: actions/checkout@v2
         # - name: Set up QEMU
