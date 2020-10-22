@@ -10,6 +10,8 @@ jobs:
     outputs:
       output1: ${{ steps.step1.outputs.test }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
       - run: ls -l ./.github/
       - id: step1
         uses: ./.github/actions/parse
