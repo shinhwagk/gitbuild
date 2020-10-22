@@ -10,7 +10,7 @@ jobs:
     outputs:
       output1: ${{ steps.step1.outputs.test }}
     steps:
-      - run: ls -l ./.github/actions/parse
+      - run: ls -l ./.github/
       - id: step1
         uses: ./.github/actions/parse
   job2:
