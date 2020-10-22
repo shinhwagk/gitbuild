@@ -36,5 +36,7 @@ jobs:
           file: images/1.0.0/Dockerfile
           tags: |
             user/app:latest
+            user/app:1.0.0
+      - run: docker images
 #       - name: Image digest
 #         run: echo ${{ steps.docker_build.outputs.digest }}
