@@ -12,6 +12,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v2
+      - uses: actions/setup-node@v2-beta
+        with:
+          node-version: '12'
+      - run: cd /home/runner/work/gitbuild/gitbuild/.github/actions/parse/ && npm i
       - run: ls -l /home/runner/work/gitbuild/gitbuild/.github/actions/parse/index.js
       - id: step1
         uses: ./.github/actions/parse
