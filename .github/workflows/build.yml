@@ -11,7 +11,7 @@ jobs:
       output1: ${{ steps.step1.outputs.test }}
     steps:
       - id: step1
-        run: echo "::set-output name=test::[{\"context\":\"images/1.0.0\",\"file\":\"images/1.0.0/Dockerfile\",\"tags\":\"user/app:latest\"}]"
+        run: echo "::set-output name=test::[{\"context\":\"images/1.0.0\",\"file\":\"images/1.0.0/Dockerfile\",\"tags\":\"user/app:latest\\nuser/app:1\\n\"}]"
   job2:
     needs: job1
     strategy:
