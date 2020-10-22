@@ -11,7 +11,7 @@ jobs:
       output1: ${{ steps.step1.outputs.test }}
     steps:
       - id: step1
-        uses: ./parse
+        uses: ./.github/actions/parse
   job2:
     needs: job1
     strategy:
