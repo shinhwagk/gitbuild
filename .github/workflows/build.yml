@@ -8,7 +8,7 @@ jobs:
   job1:
     runs-on: ubuntu-latest
     outputs:
-      output1: ${{ steps.step1.outputs.test }}
+      output1: ${{ steps.step1.outputs.time }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v2
@@ -19,6 +19,7 @@ jobs:
       - run: ls -l /home/runner/work/gitbuild/gitbuild/.github/actions/parse/index.js
       - id: step1
         uses: ./.github/actions/parse
+      - run: echo ${{steps.step1.outputs.time}}
   job2:
     needs: job1
     strategy:
